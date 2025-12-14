@@ -17,7 +17,6 @@
 - [🚀 Usage / Simulation](#-usage--simulation)
 - [🛠️ Configuration](#-configuration)
 - [🔮 Future Roadmap](#-future-roadmap)
-- [👤 Author](#-author)
 
 ---
 
