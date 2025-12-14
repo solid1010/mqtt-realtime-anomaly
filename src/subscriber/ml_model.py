@@ -10,20 +10,15 @@ import config
 import paho.mqtt.client as mqtt
 
 # --- ML Model Memory (Sliding Window) ---
-# We keep the last 50 data points to learn the "Normal" behavior dynamically.
-window_size = 50
-data_window = deque(maxlen=window_size)
-
-# --- Warm-up Configuration ---
-# Minimum data points required before starting detection.
-MIN_DATA_REQUIRED = 20 
+# We use the WINDOW_SIZE from config.py
+data_window = deque(maxlen=config.WINDOW_SIZE)
 
 def detect_anomaly_zscore(new_value):
     """
     Z-Score Method: Statistical Anomaly Detection.
     """
-    # Skip calculation if data is insufficient
-    if len(data_window) < MIN_DATA_REQUIRED:
+    # Skip calculation if data is insufficient (Based on Config)
+    if len(data_window) < config.MIN_DATA_REQUIRED:
         return False, 0.0
 
     mean = np.mean(data_window) 
@@ -44,7 +39,7 @@ def on_connect(client, userdata, flags, rc):
         if rc == 0:
             print(f"[INFO] Connected to Broker at {config.BROKER_ADDRESS}")
             client.subscribe(config.TOPIC_NAME)
-            print(f"[SYSTEM] Initializing Calibration Phase (Need {MIN_DATA_REQUIRED} samples)...")
+            print(f"[SYSTEM] Initializing Calibration Phase (Need {config.MIN_DATA_REQUIRED} samples)...")
     else:
         print(f"[INFO] Connected to Broker.")
         client.subscribe(config.TOPIC_NAME)
@@ -63,18 +58,18 @@ def on_message(client, userdata, msg):
         # --- Logic Flow: Calibration vs. Detection ---
         
         # 1. Warm-up Phase
-        if len(data_window) < MIN_DATA_REQUIRED:
+        if len(data_window) < config.MIN_DATA_REQUIRED:
             data_window.append(temp)
-            remaining = MIN_DATA_REQUIRED - len(data_window)
+            remaining = config.MIN_DATA_REQUIRED - len(data_window)
             print(f"[CALIBRATION] Reading: {temp}°C - {remaining} samples left...")
-            if len(data_window) == MIN_DATA_REQUIRED:
+            if len(data_window) == config.MIN_DATA_REQUIRED:
                 print(f"\n[SYSTEM] ✅ Calibration Complete! Hybrid Model ACTIVE.\n")
             return
 
         # 2. Hybrid Detection Phase (Statistical + Rule Based)
         is_stat_anomaly, score = detect_anomaly_zscore(temp)
         
-        # Fail-Safe Rule: Even if statistics say it's fine, > 90.0 is ALWAYS critical.
+        # Fail-Safe Rule using config
         is_hard_limit = temp >= config.ANOMALY_THRESHOLD
 
         if is_stat_anomaly or is_hard_limit:
@@ -82,12 +77,9 @@ def on_message(client, userdata, msg):
             print(f"[DATA] Received {temp}°C")
             print(f"[ALERT] 🚨 ANOMALY DETECTED! ({reason})")
             
-            # CRITICAL FIX: Do NOT add anomalies to the learning window!
-            # If we add them, the model 'learns' that 90C is normal (Model Poisoning).
-            # We keep the memory pure with only normal data.
+            # Prevent Model Poisoning: Do NOT add anomalies to memory
         else:
             print(f"[DATA] Received {temp}°C (Normal)")
-            # Only learn from normal data
             data_window.append(temp)
 
     except Exception as e:
