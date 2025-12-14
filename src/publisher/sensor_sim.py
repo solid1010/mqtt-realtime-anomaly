@@ -16,7 +16,7 @@ def on_connect(client, userdata, flags, rc):
         print(f"[ERROR] Failed to connect, return code {rc}")
 
 # Create Client
-client = mqtt.Client("Sensor-01")
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, "Sensor-01")
 
 # --- LWT (Last Will and Testament) Configuration ---
 # The Broker will publish this message automatically if the sensor disconnects unexpectedly.
@@ -46,7 +46,7 @@ try:
         }
 
         # 2. Publish Data (QoS 1: Guaranteed Delivery)
-        client.publish(config.TOPIC_NAME, json.dumps(payload), qos=1)
+        client.publish(config.TOPIC_NAME, json.dumps(payload), qos=1,retain=True)
         
         # Terminal Output (Log)
         print(f"[SENSOR-01] Sending: {temperature}°C ({status})")
