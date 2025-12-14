@@ -16,7 +16,6 @@ data_window = deque(maxlen=window_size)
 
 # --- Warm-up Configuration ---
 # Minimum data points required before starting detection.
-# The model will NOT make predictions for the first 20 readings.
 MIN_DATA_REQUIRED = 20 
 
 def detect_anomaly_zscore(new_value):
@@ -27,12 +26,11 @@ def detect_anomaly_zscore(new_value):
     if len(data_window) < MIN_DATA_REQUIRED:
         return False, 0.0
 
-    mean = np.mean(data_window) # Calculate the average
-    std = np.std(data_window)   # Calculate standard deviation
+    mean = np.mean(data_window) 
+    std = np.std(data_window)   
 
-    if std == 0: return False, 0.0 # Prevent division by zero
+    if std == 0: return False, 0.0 
 
-    # Calculate Z-Score
     z_score = (new_value - mean) / std
 
     # Threshold > 3 means anomaly
@@ -64,28 +62,33 @@ def on_message(client, userdata, msg):
         
         # --- Logic Flow: Calibration vs. Detection ---
         
-        # 1. If insufficient data, operate in 'Calibration' mode only
+        # 1. Warm-up Phase
         if len(data_window) < MIN_DATA_REQUIRED:
             data_window.append(temp)
             remaining = MIN_DATA_REQUIRED - len(data_window)
-            print(f"[CALIBRATION] Reading: {temp}°C - {remaining} samples left to start detection...")
-            
+            print(f"[CALIBRATION] Reading: {temp}°C - {remaining} samples left...")
             if len(data_window) == MIN_DATA_REQUIRED:
-                print(f"\n[SYSTEM] ✅ Calibration Complete! Model is now ACTIVE.\n")
+                print(f"\n[SYSTEM] ✅ Calibration Complete! Hybrid Model ACTIVE.\n")
             return
 
-        # 2. If sufficient data, switch to 'Detection' mode
-        is_anomaly, score = detect_anomaly_zscore(temp)
-
-        if is_anomaly:
-            print(f"[DATA] Received {temp}°C")
-            print(f"[ALERT] 🚨 STATISTICAL ANOMALY DETECTED! (Z-Score: {score:.2f})")
-        else:
-            # System is stable; no need to print 'Learning' continuously
-            print(f"[DATA] Received {temp}°C (Normal)")
+        # 2. Hybrid Detection Phase (Statistical + Rule Based)
+        is_stat_anomaly, score = detect_anomaly_zscore(temp)
         
-        # Continue adding data to memory (Continuous Learning)
-        data_window.append(temp)
+        # Fail-Safe Rule: Even if statistics say it's fine, > 90.0 is ALWAYS critical.
+        is_hard_limit = temp >= config.ANOMALY_THRESHOLD
+
+        if is_stat_anomaly or is_hard_limit:
+            reason = "Hard Limit" if is_hard_limit else f"Z-Score {score:.2f}"
+            print(f"[DATA] Received {temp}°C")
+            print(f"[ALERT] 🚨 ANOMALY DETECTED! ({reason})")
+            
+            # CRITICAL FIX: Do NOT add anomalies to the learning window!
+            # If we add them, the model 'learns' that 90C is normal (Model Poisoning).
+            # We keep the memory pure with only normal data.
+        else:
+            print(f"[DATA] Received {temp}°C (Normal)")
+            # Only learn from normal data
+            data_window.append(temp)
 
     except Exception as e:
         print(f"[ERROR] Logic error: {e}")
