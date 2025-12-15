@@ -150,7 +150,9 @@ docker run -it -p 1883:1883 eclipse-mosquitto
 ```
 
 *(Alternatively, if you have Mosquitto installed locally, just run `mosquitto` in a new terminal).*
-
+```bash
+brew services start mosquitto
+```
 -----
 
 ## 🚀 Usage / Simulation
